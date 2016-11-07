@@ -1,0 +1,77 @@
+#!/bin/bash 
+
+
+CLUSTER1=/opt/extility/skyline/war/nodecpu10/
+CLUSTER2=/opt/extility/skyline/war/nodecpu10/cluster2-
+
+
+
+for i in $(node-tool -l -v | grep 'Node IP:' | awk '{print $3}') ;
+	do
+		if [[ -n $(awk 'NR==2' $CLUSTER1/$i.csv | grep $(date -d"10 minutes ago" +%H:%M)) ]] ; then
+			mv $CLUSTER1/$i.csv /root/nodecpudelete/ 
+
+                #Create files
+                touch $CLUSTER1/$i.csv
+
+                #Set CSV headings
+        	        if  ! grep -q 'DATE,CORE,USAGE' $CLUSTER1$i.csv ; then
+	                        sed -i -e '1 i\DATE,CORE,USAGE' $CLUSTER1$i.csv ;
+               		fi
+
+                #Get data
+                sshe $i "/usr/bin/mpstat -P ALL | /usr/bin/mpstat -P ALL | /usr/bin/awk -v DATE=$(date '+%Y-%m-%dT%H:%M:%S') 'NR>4 {print DATE\",\"\$2\",\"(100 - \$12)}'" >> $CLUSTER1$i.csv
+
+                DATEF=$(date +"%Y%m%d-%H%M" -d "5 min ago")
+
+	                if [ -f $CLUSTER1$i.csv.1.gz ]; then
+        	                mv $CLUSTER1$i.csv.1.gz /root/nodecpudelete/
+                	fi
+
+		else
+	
+		#Create files
+		touch $CLUSTER1/$i.csv
+
+		#Set CSV headings
+		if  ! grep -q 'DATE,CORE,USAGE' $CLUSTER1$i.csv ; then
+			sed -i -e '1 i\DATE,CORE,USAGE' $CLUSTER1$i.csv ;
+		fi
+
+		#Get data
+		sshe $i "/usr/bin/mpstat -P ALL | /usr/bin/mpstat -P ALL | /usr/bin/awk -v DATE=$(date '+%Y-%m-%dT%H:%M:%S') 'NR>4 {print DATE\",\"\$2\",\"(100 - \$12)}'" >> $CLUSTER1$i.csv
+
+		DATEF=$(date +"%Y%m%d-%H%M" -d "5 min ago")
+		
+		if [ -f $CLUSTER1$i.csv.1.gz ]; then 
+			mv $CLUSTER1$i.csv.1.gz /root/nodecpudelete/
+		fi
+	fi
+
+	done
+
+#Cluster 2 usage
+
+
+for n in $(sshe 10.157.16.11 "node-tool -l -v | grep 'Node IP:' |awk '{print \$3}'") ; 
+	do  
+                #Create files
+                touch $CLUSTER2$n.csv
+
+                #Set CSV headings
+                if  ! grep -q 'DATE,CORE,USAGE' $CLUSTER2$n.csv ; then
+                        sed -i -e '1 i\DATE,CORE,USAGE' $CLUSTER2$n.csv ;
+                fi
+
+		#GET data
+		sshe 10.157.16.11 "/root/scripts/nodecpu/getusage.sh $n " >> $CLUSTER2$n.csv ;
+
+	        DATEF=$(date +"%Y%m%d-%H%M" -d "5 min ago")
+
+                if [ -f $CLUSTER2$n.csv.1.gz ]; then
+                        mv $CLUSTER2$n.csv.1.gz $CLUSTER2$n.csv.$DATEF.gz
+                fi
+	
+done
+
+find $CLUSTER1*.gz -mtime +90 -exec rm {} \;
